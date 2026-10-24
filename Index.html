@@ -1,267 +1,36 @@
-<!DOCTYPE html>
-<html lang="de" class="h-full bg-slate-950 text-slate-100">
+<!doctype html>
+<html lang="de">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>iCloud Photo Album Map</title>
-  
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Leaflet CSS & JS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- ExifReader for reading GPS EXIF directly from images -->
-  <script src="https://cdn.jsdelivr.net/npm/exifreader@4.21.1/dist/exif-reader.js"></script>
-
-  <style>
-    .leaflet-popup-content-wrapper {
-      background: rgba(15, 23, 42, 0.9);
-      backdrop-filter: blur(12px);
-      color: #f8fafc;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: 1rem;
-      padding: 0;
-      overflow: hidden;
-    }
-    .leaflet-popup-tip {
-      background: rgba(15, 23, 42, 0.9);
-    }
-    .custom-marker {
-      transition: transform 0.2s ease;
-    }
-    .custom-marker:hover {
-      transform: scale(1.15) translateY(-4px);
-      z-index: 1000 !important;
-    }
-  </style>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#070b17">
+<title>Foto Map — Deine Reise in Bildern</title>
+<script src="https://cdn.tailwindcss.com"></script><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/lucide@latest"></script><script src="https://cdn.jsdelivr.net/npm/exifreader@4.21.1/dist/exif-reader.js"></script>
+<style>
+:root{color-scheme:dark}html,body{min-height:100%;background:#070b17}#map{min-height:380px;background:#101827}.leaflet-container{font:inherit}.leaflet-popup-content-wrapper{color:#eef2ff;background:#101827;border:1px solid #ffffff1c;border-radius:16px}.leaflet-popup-tip{background:#101827}.leaflet-popup-content{margin:14px 16px}.tab[aria-selected=true]{color:white;border-color:#818cf8;background:#312e8133}.stop[aria-current=true]{border-color:#818cf880;background:#312e8125}.scroll{scrollbar-width:thin;scrollbar-color:#334155 transparent}.marker{display:grid;width:34px;height:34px;place-items:center;border:2px solid #c7d2fe;border-radius:50%;color:white;background:#4f46e5;font-size:12px;font-weight:700;box-shadow:0 4px 16px #020617bb}@media(max-width:767px){#map{min-height:43vh}}
+</style>
 </head>
-<body class="h-full flex flex-col font-sans overflow-hidden">
-
-  <!-- Header / Navigation -->
-  <header class="h-16 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 px-4 flex items-center justify-between z-20 shrink-0">
-    <div class="flex items-center gap-3">
-      <div class="p-2 bg-indigo-600/20 text-indigo-400 rounded-xl border border-indigo-500/30">
-        <i data-lucide="map-pin" class="w-6 h-6"></i>
-      </div>
-      <div>
-        <h1 class="font-bold text-lg leading-none">Photo Map</h1>
-        <p class="text-xs text-slate-400 mt-1" id="activeAlbumLabel">iCloud Album Explorer</p>
-      </div>
-    </div>
-
-    <div class="flex items-center gap-2">
-      <!-- Album Selector Dropdown -->
-      <select id="albumSelect" onchange="switchAlbum(this.value)" class="bg-slate-800 border border-slate-700 text-sm rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500 max-w-[180px] sm:max-w-[240px] truncate">
-      </select>
-
-      <!-- Manage Albums Button -->
-      <button onclick="toggleModal(true)" class="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl transition flex items-center gap-2 text-sm font-medium px-3">
-        <i data-lucide="plus-circle" class="w-4 h-4"></i>
-        <span class="hidden sm:inline">Album verwalten</span>
-      </button>
-    </div>
-  </header>
-
-  <!-- Main Content Layout -->
-  <div class="flex-1 flex flex-col md:flex-row relative overflow-hidden">
-    <!-- Map Container -->
-    <div id="map" class="flex-1 h-full w-full bg-slate-950 z-10"></div>
-
-    <!-- Sidebar / Photo Grid -->
-    <aside class="w-full md:w-96 bg-slate-900/90 backdrop-blur-md border-t md:border-t-0 md:border-l border-slate-800 flex flex-col z-20 max-h-[40vh] md:max-h-full">
-      <div class="p-4 border-b border-slate-800 flex justify-between items-center">
-        <span class="text-sm font-semibold text-slate-300" id="photoCount">0 Fotos auf der Karte</span>
-        <button onclick="fitAllMarkers()" class="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
-          <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i> Alle zeigen
-        </button>
-      </div>
-      <div id="photoList" class="flex-1 overflow-y-auto p-4 grid grid-cols-2 gap-3">
-        <!-- Photo Cards populated by JS -->
-      </div>
-    </aside>
-  </div>
-
-  <!-- Modal: Album Manager -->
-  <div id="albumModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
-      <div class="flex justify-between items-center mb-4">
-        <h3 class="text-lg font-bold flex items-center gap-2">
-          <i data-lucide="link" class="w-5 h-5 text-indigo-400"></i> iCloud Album hinzufügen
-        </h3>
-        <button onclick="toggleModal(false)" class="text-slate-400 hover:text-slate-200">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
-      </div>
-
-      <form onsubmit="addAlbum(event)" class="space-y-4 mb-6">
-        <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1">Name des Albums / der Reise</label>
-          <input type="text" id="albumNameInput" required placeholder="z. B. Toskana Bikepacking 2026" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm focus:outline-none focus:border-indigo-500">
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1">iCloud-Freigabelink</label>
-          <input type="url" id="albumUrlInput" required placeholder="https://photos.icloud.com/shared/album/..." class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm focus:outline-none focus:border-indigo-500">
-        </div>
-        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-3 rounded-xl transition text-sm">
-          Album speichern & laden
-        </button>
-      </form>
-
-      <div class="border-t border-slate-800 pt-4">
-        <h4 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Gespeicherte Alben</h4>
-        <div id="savedAlbumsList" class="space-y-2 max-h-40 overflow-y-auto"></div>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    // Initialize Lucide Icons
-    lucide.createIcons();
-
-    // Map Setup
-    const map = L.map('map', { zoomControl: false }).setView([43.4000, 10.8600], 8);
-    L.control.zoom({ position: 'bottomleft' }).addTo(map);
-
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap &copy; CARTO',
-      maxZoom: 19
-    }).addTo(map);
-
-    let markersLayer = L.layerGroup().addTo(map);
-    let activeAlbums = JSON.parse(localStorage.getItem('icloud_albums')) || [
-      { id: 'default', name: 'Standard Album', url: 'https://photos.icloud.com/shared/album/0d4DglBcEyGpc1-neZKrAwEJgP' }
-    ];
-
-    function saveAlbums() {
-      localStorage.setItem('icloud_albums', JSON.stringify(activeAlbums));
-    }
-
-    function toggleModal(show) {
-      document.getElementById('albumModal').classList.toggle('hidden', !show);
-      if(show) renderSavedAlbumsList();
-    }
-
-    function renderSavedAlbumsList() {
-      const container = document.getElementById('savedAlbumsList');
-      container.innerHTML = activeAlbums.map((album, idx) => `
-        <div class="flex items-center justify-between p-2.5 bg-slate-800/60 rounded-xl text-sm border border-slate-700/50">
-          <span class="font-medium truncate max-w-[220px]">${album.name}</span>
-          <button onclick="removeAlbum(${idx})" class="text-rose-400 hover:text-rose-300 p-1">
-            <i data-lucide="trash-2" class="w-4 h-4"></i>
-          </button>
-        </div>
-      `).join('');
-      lucide.createIcons();
-    }
-
-    function updateAlbumDropdown() {
-      const select = document.getElementById('albumSelect');
-      select.innerHTML = activeAlbums.map((album, idx) => `
-        <option value="${idx}">${album.name}</option>
-      `).join('');
-    }
-
-    function addAlbum(e) {
-      e.preventDefault();
-      const name = document.getElementById('albumNameInput').value;
-      const url = document.getElementById('albumUrlInput').value;
-      
-      activeAlbums.push({ id: Date.now().toString(), name, url });
-      saveAlbums();
-      updateAlbumDropdown();
-      switchAlbum(activeAlbums.length - 1);
-      toggleModal(false);
-      document.getElementById('albumNameInput').value = '';
-      document.getElementById('albumUrlInput').value = '';
-    }
-
-    function removeAlbum(idx) {
-      if(activeAlbums.length <= 1) return alert('Du musst mindestens ein Album behalten.');
-      activeAlbums.splice(idx, 1);
-      saveAlbums();
-      updateAlbumDropdown();
-      renderSavedAlbumsList();
-      switchAlbum(0);
-    }
-
-    function switchAlbum(index) {
-      const album = activeAlbums[index];
-      document.getElementById('activeAlbumLabel').innerText = album.name;
-      loadAlbumData(album.url);
-    }
-
-    // Mock Data Generator for demonstration if live fetching isn't available
-    function loadAlbumData(url) {
-      markersLayer.clearLayers();
-      
-      // Sample coordinates for visualization
-      const samplePhotos = [
-        { lat: 43.4000, lng: 10.8600, title: "Volterra Panorama", url: "https://images.unsplash.com/photo-1541370976299-4d24ebbc9077?w=500" },
-        { lat: 43.5485, lng: 10.3106, title: "Livorno Küste", url: "https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=500" },
-        { lat: 43.3188, lng: 11.3307, title: "Siena Platz", url: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500" }
-      ];
-
-      const bounds = L.latLngBounds();
-      const photoList = document.getElementById('photoList');
-      photoList.innerHTML = '';
-
-      samplePhotos.forEach((photo, idx) => {
-        bounds.extend([photo.lat, photo.lng]);
-
-        // Custom Marker
-        const icon = L.divIcon({
-          className: 'custom-marker',
-          html: `<div class="w-10 h-10 rounded-full border-2 border-indigo-500 overflow-hidden shadow-lg bg-slate-900">
-                  <img src="${photo.url}" class="w-full h-full object-cover">
-                 </div>`,
-          iconSize: [40, 40],
-          iconAnchor: [20, 20]
-        });
-
-        const marker = L.marker([photo.lat, photo.lng], { icon })
-          .bindPopup(`
-            <div class="p-2 w-48">
-              <img src="${photo.url}" class="w-full h-28 object-cover rounded-lg mb-2">
-              <h4 class="font-bold text-sm text-slate-100">${photo.title}</h4>
-              <p class="text-xs text-slate-400 mt-1">${photo.lat.toFixed(4)}, ${photo.lng.toFixed(4)}</p>
-            </div>
-          `);
-
-        markersLayer.addLayer(marker);
-
-        // Sidebar Card
-        photoList.innerHTML += `
-          <div onclick="focusMarker(${photo.lat}, ${photo.lng})" class="cursor-pointer bg-slate-800/50 hover:bg-slate-800 rounded-xl overflow-hidden border border-slate-700/50 transition group">
-            <div class="h-24 overflow-hidden">
-              <img src="${photo.url}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
-            </div>
-            <div class="p-2">
-              <p class="text-xs font-semibold truncate text-slate-200">${photo.title}</p>
-            </div>
-          </div>
-        `;
-      });
-
-      document.getElementById('photoCount').innerText = `${samplePhotos.length} Fotos geladen`;
-      map.fitBounds(bounds, { padding: [50, 50] });
-    }
-
-    function focusMarker(lat, lng) {
-      map.flyTo([lat, lng], 13, { duration: 1.2 });
-    }
-
-    function fitAllMarkers() {
-      if(markersLayer.getLayers().length > 0) {
-        const group = new L.featureGroup(markersLayer.getLayers());
-        map.fitBounds(group.getBounds(), { padding: [50, 50] });
-      }
-    }
-
-    // Initialize
-    updateAlbumDropdown();
-    switchAlbum(0);
-  </script>
-</body>
-</html>
+<body class="font-sans antialiased text-slate-100">
+<header class="sticky top-0 z-[800] border-b border-white/[.07] bg-[#070b17]/90 px-4 py-3 backdrop-blur-xl sm:px-6"><div class="mx-auto flex max-w-[1700px] items-center justify-between gap-3"><div class="flex min-w-0 items-center gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-indigo-300/20 bg-indigo-400/10 text-indigo-200"><i data-lucide="map-pinned"></i></span><div class="min-w-0"><b class="block text-sm text-white">Foto Map</b><span id="albumTitle" class="block truncate text-xs text-slate-400">Deine Reise in Bildern</span></div></div><div class="flex gap-2"><button id="demo" class="hidden rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-300 hover:text-white sm:block">Beispielreise</button><button id="savedBtn" class="rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-200"><i data-lucide="library" class="inline h-4 w-4"></i><span class="hidden sm:inline"> Meine Alben</span></button></div></div></header>
+<main class="mx-auto flex w-full max-w-[1700px] flex-1 flex-col gap-4 p-3 sm:gap-5 sm:p-5">
+<section class="rounded-2xl border border-white/[.08] bg-gradient-to-br from-indigo-950/80 via-slate-900 to-slate-950 p-4 sm:p-6"><div class="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end"><div class="max-w-2xl"><span class="mb-2 inline-flex rounded-full border border-indigo-300/15 bg-indigo-300/[.07] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[.16em] text-indigo-200">Deine Erinnerungen, auf der Karte</span><h1 class="text-xl font-semibold text-white sm:text-2xl">Wo deine Reise dich hingeführt hat.</h1><p class="mt-2 text-sm leading-relaxed text-slate-300/80">Öffentlichen iCloud-Albumlink oder Fotos hinzufügen. GPS und Aufnahmedatum formen daraus Route, Reiseverlauf und spannende Orte.</p></div><form id="importForm" class="flex flex-col gap-2 sm:flex-row lg:min-w-[480px]"><label class="sr-only" for="albumUrl">iCloud-Albumlink</label><input id="albumUrl" type="url" required placeholder="Öffentlichen iCloud-Albumlink einfügen …" class="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-950/70 px-3.5 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-indigo-300/60"><button id="importBtn" class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-60"><i data-lucide="scan-search" class="h-4 w-4"></i><span>Album analysieren</span></button></form></div><div class="mt-4 flex flex-wrap items-center gap-4 border-t border-white/[.07] pt-3"><label for="files" class="cursor-pointer text-xs font-medium text-slate-300 hover:text-white"><i data-lucide="images" class="mr-1 inline h-4 w-4 text-indigo-300"></i>Fotos vom Gerät auswählen</label><input id="files" class="sr-only" type="file" accept="image/*" multiple><span class="text-[11px] text-slate-500">Lokale Fotos bleiben auf deinem Gerät</span><div id="status" class="hidden basis-full rounded-xl border px-3 py-2.5 text-xs leading-relaxed" role="status"></div></div></section>
+<section class="grid grid-cols-2 gap-3 lg:grid-cols-4"><div class="rounded-2xl border border-white/[.07] bg-slate-900/55 p-4"><span class="text-xs text-slate-400">Fotos</span><p id="statPhotos" class="mt-1 text-2xl font-semibold text-white">0</p><small id="statDates" class="text-[11px] text-slate-500">mit Aufnahmedatum</small></div><div class="rounded-2xl border border-white/[.07] bg-slate-900/55 p-4"><span class="text-xs text-slate-400">GPS-Fotos</span><p id="statGps" class="mt-1 text-2xl font-semibold text-white">0</p><small class="text-[11px] text-slate-500">mit Standort</small></div><div class="rounded-2xl border border-white/[.07] bg-slate-900/55 p-4"><span class="text-xs text-slate-400">Route</span><p id="statKm" class="mt-1 text-2xl font-semibold text-white">0 km</p><small class="text-[11px] text-slate-500">Luftlinie zwischen Fotos</small></div><div class="rounded-2xl border border-white/[.07] bg-slate-900/55 p-4"><span class="text-xs text-slate-400">Fotozeitraum</span><p id="statDays" class="mt-1 text-2xl font-semibold text-white">—</p><small class="text-[11px] text-slate-500">vom ersten bis letzten Foto</small></div></section>
+<section class="flex min-h-[650px] flex-1 flex-col overflow-hidden rounded-2xl border border-white/[.08] bg-slate-900/30 lg:flex-row"><div class="relative min-h-[43vh] flex-1 lg:min-h-[660px]"><div id="map" class="absolute inset-0 h-full w-full" aria-label="Interaktive Reisekarte"></div><div class="absolute left-3 top-3 z-[500] rounded-xl border border-white/10 bg-slate-950/90 px-3 py-2"><b id="mapTitle" class="block text-xs text-white">Deine Fotospur</b><small id="mapSubtitle" class="text-[10px] text-slate-400">Importiere ein Album, um loszulegen</small></div><button id="fit" class="absolute bottom-4 right-4 z-[500] rounded-xl border border-white/10 bg-slate-950/90 px-3 py-2.5 text-xs text-slate-200">Route zeigen</button></div><aside class="flex min-h-[440px] flex-col border-t border-white/[.07] lg:min-h-0 lg:w-[410px] lg:shrink-0 lg:border-l lg:border-t-0"><div class="border-b border-white/[.07] px-4 py-3"><b class="text-sm text-white">Reiseverlauf</b><p id="period" class="text-[11px] text-slate-400">Orte, Zeit und Erinnerungen</p></div><nav class="flex border-b border-white/[.07] px-3"><button class="tab border-b-2 border-transparent px-3 py-3 text-xs text-slate-400" data-tab="stops" aria-selected="true">Orte</button><button class="tab border-b-2 border-transparent px-3 py-3 text-xs text-slate-400" data-tab="timeline" aria-selected="false">Zeitleiste</button><button class="tab border-b-2 border-transparent px-3 py-3 text-xs text-slate-400" data-tab="photos" aria-selected="false">Fotos</button></nav><div id="content" class="scroll flex-1 overflow-y-auto p-4" aria-live="polite"></div><p class="border-t border-white/[.07] px-4 py-3 text-[10px] leading-relaxed text-slate-500">Aufenthaltsdauer = Fotospanne zwischen Bildern am Ort, keine exakte Ankunft/Abreise. Koordinaten werden für Wikipedia-Ortssuchen an Wikimedia übermittelt.</p></aside></section><p class="text-[10px] leading-relaxed text-slate-600">Kartenmaterial © OpenStreetMap, © CARTO · Ortsinfos: Wikipedia · Foto Map speichert keine Fotos.</p>
+</main>
+<div id="savedModal" class="fixed inset-0 z-[1200] hidden items-center justify-center bg-slate-950/80 p-4" role="dialog" aria-modal="true"><div class="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900 p-5"><div class="mb-4 flex justify-between"><div><h2 class="font-semibold text-white">Meine Alben</h2><p class="text-xs text-slate-400">Links bleiben lokal im Browser.</p></div><button id="closeSaved" aria-label="Schließen">✕</button></div><div id="savedList" class="max-h-60 space-y-2 overflow-y-auto"></div><form id="saveForm" class="mt-4 grid gap-2 border-t border-white/10 pt-4"><input id="saveName" placeholder="Albumname" class="rounded-lg border border-white/10 bg-slate-950 p-2 text-sm"><input id="saveUrl" type="url" placeholder="iCloud-Link" class="rounded-lg border border-white/10 bg-slate-950 p-2 text-sm"><button class="rounded-lg bg-indigo-500 p-2 text-sm">Link speichern</button></form><p class="mt-3 text-[10px] text-slate-500">Ein öffentlicher Link ist wie ein Schlüssel zum Album. Teile ihn nur mit Vertrauenspersonen.</p></div></div>
+<script>
+const demoPhotos=[{title:"Volterra",lat:43.4,lng:10.86,capturedAt:"2026-06-12T10:15:00Z",image:"https://images.unsplash.com/photo-1541370976299-4d24ebbc9077?w=600&auto=format&fit=crop&q=80"},{title:"Gassen am Morgen",lat:43.4004,lng:10.8614,capturedAt:"2026-06-12T11:05:00Z",image:"https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=600&auto=format&fit=crop&q=80"},{title:"San Gimignano",lat:43.4677,lng:11.0431,capturedAt:"2026-06-13T14:20:00Z",image:"https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop&q=80"},{title:"Siena",lat:43.3188,lng:11.3307,capturedAt:"2026-06-14T18:35:00Z",image:"https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=600&auto=format&fit=crop&q=80"},{title:"Florenz",lat:43.7696,lng:11.2558,capturedAt:"2026-06-16T09:10:00Z",image:"https://images.unsplash.com/photo-1543429258-0b8e7f093b4e?w=600&auto=format&fit=crop&q=80"}];
+const $=id=>document.getElementById(id),S={photos:[],stops:[],tab:"stops",name:"Deine Reise",urls:[],demo:false};const map=L.map("map",{zoomControl:false}).setView([43.5,11],7);L.control.zoom({position:"bottomleft"}).addTo(map);L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{attribution:"&copy; OpenStreetMap &copy; CARTO",maxZoom:19}).addTo(map);const layer=L.layerGroup().addTo(map);let route;
+const date=v=>{const d=v?new Date(v):null;return d&&!isNaN(d)?d:null},fmt=(d,o={day:"numeric",month:"short"})=>d?new Intl.DateTimeFormat("de-DE",o).format(d):"Zeit unbekannt",dist=(a,b)=>{const r=x=>x*Math.PI/180,dl=r(b.lat-a.lat),dn=r(b.lng-a.lng),v=Math.sin(dl/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dn/2)**2;return 6371*2*Math.atan2(Math.sqrt(v),Math.sqrt(1-v))};
+function status(msg,type="info"){const e=$("status");e.textContent=msg;e.className="basis-full rounded-xl border px-3 py-2.5 text-xs leading-relaxed "+(type==="error"?"border-rose-300/20 bg-rose-400/[.07] text-rose-200":type==="ok"?"border-emerald-300/20 bg-emerald-400/[.06] text-emerald-200":"border-indigo-300/20 bg-indigo-400/[.06] text-indigo-100")}
+function safe(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function install(photos,name="Deine Reise",isDemo=false){S.urls.forEach(URL.revokeObjectURL);S.urls=[];S.photos=photos;S.name=name;S.demo=isDemo;const located=photos.filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng)).sort((a,b)=>(date(a.capturedAt)?.getTime()||0)-(date(b.capturedAt)?.getTime()||0));S.stops=[];for(const p of located){const s=S.stops.at(-1),c=s&&{lat:s.lat/s.photos.length,lng:s.lng/s.photos.length},prev=s&&date(s.photos.at(-1).capturedAt),now=date(p.capturedAt);if(s&&dist(c,p)<2.5&&(!now||!prev||now-prev<=18*3600000)){s.photos.push(p);s.lat+=p.lat;s.lng+=p.lng}else S.stops.push({photos:[p],lat:p.lat,lng:p.lng,wikiState:"loading"})}S.stops.forEach((s,i)=>{s.lat/=s.photos.length;s.lng/=s.photos.length;s.index=i+1;const ds=s.photos.map(p=>date(p.capturedAt)).filter(Boolean).sort((a,b)=>a-b);s.first=ds[0]||null;s.last=ds.at(-1)||null});$("albumTitle").textContent=name;stats();drawMap();render();wiki()}
+function stats(){const ds=S.photos.map(p=>date(p.capturedAt)).filter(Boolean).sort((a,b)=>a-b),ps=S.photos.filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng)).sort((a,b)=>(date(a.capturedAt)?.getTime()||0)-(date(b.capturedAt)?.getTime()||0));let km=0;for(let i=1;i<ps.length;i++)km+=dist(ps[i-1],ps[i]);$("statPhotos").textContent=S.photos.length;$("statDates").textContent=`${ds.length} mit Aufnahmedatum`;$("statGps").textContent=ps.length;$("statKm").textContent=`${km<10?km.toFixed(1):Math.round(km)} km`;const days=ds.length?Math.max(1,Math.ceil((ds.at(-1)-ds[0])/86400000)):0;$("statDays").textContent=days?`${days} ${days===1?"Tag":"Tage"}`:"—";$("mapTitle").textContent=S.name;$("mapSubtitle").textContent=`${ps.length} GPS-Fotos · ${S.stops.length} Aufenthalte`;$("period").textContent=ds.length?`${fmt(ds[0],{day:"numeric",month:"long",year:"numeric"})} – ${fmt(ds.at(-1),{day:"numeric",month:"long",year:"numeric"})}`:"Orte, Zeit und Erinnerungen"}
+function duration(s){if(!s.first||!s.last||s.last-s.first<60000)return s.photos.length===1?"1 Aufnahme":"Fotospanne <1 Min.";const m=Math.round((s.last-s.first)/60000);return m<60?`Fotospanne ${m} Min.`:`Fotospanne ${Math.floor(m/60)} Std. ${m%60?m%60+" Min.":""}`}
+function drawMap(){layer.clearLayers();if(route)map.removeLayer(route);const ps=S.photos.filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng)).sort((a,b)=>(date(a.capturedAt)?.getTime()||0)-(date(b.capturedAt)?.getTime()||0));if(ps.length>1)route=L.polyline(ps.map(p=>[p.lat,p.lng]),{color:"#818cf8",weight:3,dashArray:"5 8"}).addTo(map);S.stops.forEach((s,i)=>{s.marker=L.marker([s.lat,s.lng],{icon:L.divIcon({className:"",html:`<span class="marker">${i+1}</span>`,iconSize:[34,34],iconAnchor:[17,17]})}).addTo(layer);s.marker.on("click",()=>{});});if(ps.length===1)map.setView([ps[0].lat,ps[0].lng],13);else if(ps.length>1)map.fitBounds(L.latLngBounds(ps.map(p=>[p.lat,p.lng])),{padding:[45,45],maxZoom:12})}
+function render(){const root=$("content");root.replaceChildren();if(!S.photos.length){root.innerHTML='<div class="flex min-h-64 flex-col items-center justify-center text-center"><i data-lucide="map" class="mb-3 h-8 w-8 text-indigo-300"></i><b class="text-sm">Deine Reise beginnt hier</b><p class="mt-2 text-xs text-slate-400">Albumlink oder Fotos mit GPS hinzufügen.</p><button id="demo2" class="mt-4 rounded-xl border border-indigo-300/20 bg-indigo-400/10 px-3 py-2 text-xs">Beispielreise ansehen</button></div>';$("demo2").onclick=demo;lucide.createIcons();return}if(S.tab==="stops"){const n=document.createElement("p");n.className="mb-3 rounded-xl bg-indigo-300/[.04] p-3 text-[10px] leading-relaxed text-slate-400";n.textContent="Aufenthalte sind Schätzungen aus nahen GPS-Punkten und Fotozeiten, keine exakten Ankunfts-/Abfahrtszeiten.";root.append(n);if(!S.stops.length){root.insertAdjacentHTML("beforeend",'<p class="py-8 text-center text-xs text-slate-500">Keine Fotos mit GPS-Standort gefunden.</p>');return}S.stops.forEach((s,i)=>{const el=document.createElement("article");el.className="stop mb-3 overflow-hidden rounded-2xl border border-white/[.07] bg-slate-950/45";el.innerHTML=`<button class="w-full p-3 text-left"><b class="text-xs text-white">${safe(s.wiki?.title||`Ort ${i+1}`)}</b><span class="mt-1 block text-[10px] text-slate-400">${fmt(s.first,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})} · ${duration(s)} · ${s.photos.length} Fotos</span></button><div class="border-t border-white/[.06] px-3 pb-3">${s.wikiState==="loading"?'<p class="pt-2 text-[10px] text-slate-500">Wikipedia-Orte in der Nähe werden gesucht …</p>':s.wiki?`<p class="pt-2 text-[11px] leading-relaxed text-slate-300">${safe(s.wiki.extract.slice(0,250))}${s.wiki.extract.length>250?"…":""}</p><a class="mt-2 inline-block text-[10px] text-indigo-300" href="${safe(s.wiki.url)}" target="_blank" rel="noopener noreferrer">Auf Wikipedia weiterlesen ↗</a>`:'<p class="pt-2 text-[10px] text-slate-500">Kein passender Wikipedia-Eintrag gefunden.</p>'}</div>`;el.querySelector("button").onclick=()=>{map.flyTo([s.lat,s.lng],13);s.marker.openPopup()};root.append(el)})}else if(S.tab==="timeline"){const ps=S.photos.slice().sort((a,b)=>(date(a.capturedAt)?.getTime()||0)-(date(b.capturedAt)?.getTime()||0));ps.forEach(p=>{const el=document.createElement("button");el.className="mb-2 flex w-full items-center gap-3 rounded-xl p-2 text-left hover:bg-white/[.04]";el.innerHTML=`<img src="${safe(p.image)}" class="h-12 w-14 rounded-lg object-cover"><span><b class="block text-xs">${safe(p.title||"Foto")}</b><small class="text-slate-500">${fmt(date(p.capturedAt),{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}${Number.isFinite(p.lat)?` · ${p.lat.toFixed(3)}, ${p.lng.toFixed(3)}`:" · ohne GPS"}</small></span>`;el.onclick=()=>focus(p);root.append(el)})}else{const grid=document.createElement("div");grid.className="grid grid-cols-2 gap-2";S.photos.forEach(p=>{const el=document.createElement("button");el.className="overflow-hidden rounded-xl border border-white/[.07] text-left";el.innerHTML=`<img src="${safe(p.image)}" class="aspect-[4/3] w-full object-cover"><span class="block truncate p-2 text-[10px]">${safe(p.title||"Foto")} · ${fmt(date(p.capturedAt))}</span>`;el.onclick=()=>focus(p);grid.append(el)});root.append(grid)}lucide.createIcons()}
+function focus(p){if(!Number.isFinite(p.lat)){status("Für dieses Foto gibt es keine GPS-Koordinaten.");return}map.flyTo([p.lat,p.lng],14);const s=S.stops.find(x=>x.photos.includes(p));s?.marker?.openPopup()}
+async function wiki(){for(let i=0;i<S.stops.length;i+=4)await Promise.all(S.stops.slice(i,i+4).map(async s=>{try{const q=new URLSearchParams({action:"query",list:"geosearch",gscoord:`${s.lat}|${s.lng}`,gsradius:"10000",gslimit:"1",format:"json",origin:"*"});const r=await fetch(`https://de.wikipedia.org/w/api.php?${q}`);if(!r.ok)throw Error(`Wikipedia ${r.status}`);const hits=(await r.json()).query?.geosearch||[];if(hits.length){const a=await fetch(`https://de.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(hits[0].title)}`);if(!a.ok)throw Error(`Wikipedia ${a.status}`);const d=await a.json();s.wiki={title:d.title||hits[0].title,extract:d.extract||"",url:d.content_urls?.desktop?.page||`https://de.wikipedia.org/wiki/${encodeURIComponent(hits[0].title)}`}}s.wikiState="done"}catch(e){console.warn("Wikipedia-Ortsinfo konnte nicht geladen werden",e);s.wikiState="error"}}));if(S.tab==="stops")render()}
+function demo(){install(demoPhotos,"Toskana · Beispielreise",true);status("Beispielansicht mit erfundenen Reisedaten. Importiere dein Album für echte Fotodaten.")}
+$("demo").onclick=demo;$("importForm").onsubmit=async e=>{e.preventDefault();const b=$("importBtn");b.disabled=true;b.querySelector("span").textContent="Album wird gelesen …";status("Öffentlicher iCloud-Link wird geprüft und eingelesen …");try{const r=await fetch("/api/import",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:$("albumUrl").value.trim()})}),d=await r.json();if(!r.ok)throw Error(d.error||`Importfehler ${r.status}`);install(d.photos,d.title||"iCloud Fotoalbum");status(`${d.photos.length} Fotos eingelesen. Karte und Reiseverlauf werden erstellt.`,"ok");saveAlbum(d.title||"iCloud Fotoalbum",$("albumUrl").value.trim())}catch(x){status(x.message||"Import fehlgeschlagen. Prüfe den öffentlichen Albumlink.","error")}finally{b.disabled=false;b.querySelector("span").textContent="Album analysieren"}};
+function exifDate(v){const m=String(v||"").match(/(\d{4})[:/-](\d{2})[:/-](\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);return m?new Date(Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6])).toISOString():null}function dms(v){if(!Array.isArray(v)||v.length<3)return NaN;const n=v.map(x=>Number(x?.numerator!==undefined?x.numerator/x.denominator:x));return n[0]+n[1]/60+n[2]/3600}
+$("files").onchange=async e=>{const files=[...e.target.files].filter(f=>f.type.startsWith("image/"));if(!files.length)return;const photos=[];for(const f of files){const image=URL.createObjectURL(f);S.urls.push(image);try{const x=await ExifReader.load(f,{expanded:true}),g=x.GPS||{},lat=Array.isArray(g.Latitude)?dms(g.Latitude):Number(g.Latitude),lng=Array.isArray(g.Longitude)?dms(g.Longitude):Number(g.Longitude),dateValue=x.exif?.DateTimeOriginal?.description||x.exif?.DateTimeOriginal?.value?.[0]||x.exif?.DateTime?.description;photos.push({title:f.name.replace(/\.[^.]+$/, ""),image,lat:Number.isFinite(lat)?(String(g.LatitudeRef).startsWith("S")?-Math.abs(lat):lat):null,lng:Number.isFinite(lng)?(String(g.LongitudeRef).startsWith("W")?-Math.abs(lng):lng):null,capturedAt:exifDate(dateValue)})}catch(err){console.warn("EXIF nicht lesbar",err);photos.push({title:f.name,image,lat:null,lng:null,capturedAt:null})}}const urls=S.urls.slice();install(photos,"Lokale Fotos");S.urls=urls;status(`${photos.length} Bilder gelesen; ${photos.filter(p=>Number.isFinite(p.lat)).length} mit GPS. Dateien bleiben lokal.`,"ok");e.target.value=""};
+function saved(){try{return JSON.parse(localStorage.getItem("fotoMapAlbums")||"[]")}catch(e){console.warn("Albenliste nicht lesbar",e);return[]}}function saveAlbum(name,url){try{localStorage.setItem("fotoMapAlbums",JSON.stringify([{name,url},...saved().filter(x=>x.url!==url)].slice(0,20)))}catch(e){status("Album geladen, aber Link konnte nicht lokal gespeichert werden.")}}function renderSaved(){const root=$("savedList");root.replaceChildren();saved().forEach((a,i)=>{const row=document.createElement("div");row.className="flex gap-2 rounded-lg border border-white/10 p-2";const b=document.createElement("button");b.className="min-w-0 flex-1 truncate text-left text-sm";b.textContent=a.name;b.onclick=()=>{$("albumUrl").value=a.url;closeModal();$("importForm").requestSubmit()};const d=document.createElement("button");d.textContent="×";d.setAttribute("aria-label",`${a.name} entfernen`);d.onclick=()=>{const x=saved();x.splice(i,1);localStorage.setItem("fotoMapAlbums",JSON.stringify(x));renderSaved()};row.append(b,d);root.append(row)});if(!root.children.length)root.innerHTML='<p class="py-5 text-center text-xs text-slate-500">Noch keine Alben gespeichert.</p>'}function closeModal(){$("savedModal").classList.add("hidden");$("savedModal").classList.remove("flex")}$("savedBtn").onclick=()=>{$("savedModal").classList.remove("hidden");$("savedModal").classList.add("flex");renderSaved()};$("closeSaved").onclick=closeModal;$("savedModal").onclick=e=>{if(e.target===$("savedModal"))closeModal()};$("saveForm").onsubmit=e=>{e.preventDefault();if(!$(
